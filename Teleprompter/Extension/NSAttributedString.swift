@@ -34,13 +34,13 @@ extension NSAttributedString {
     return self.attributedSubstring(from: NSRange(location: startChar, length: endChar - startChar))
   }
   
-  func rectForSelectedRange(_ range: NSRange, visibleRect: CGRect) -> CGRect? {
+  func rectForSelectedRange(_ range: NSRange, width: CGFloat) -> CGRect? {
     guard range.location + range.length <= self.length else {
       return nil
     }
     
     let textStorage = NSTextStorage(attributedString: self)
-    let textContainer = NSTextContainer(size: CGSize(width: visibleRect.width, height: .greatestFiniteMagnitude))
+    let textContainer = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
     textContainer.lineFragmentPadding = 0
     textContainer.maximumNumberOfLines = 0
     
@@ -52,12 +52,6 @@ extension NSAttributedString {
     
     let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
     var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-    
-    if rect.maxY < visibleRect.minY || rect.minY > visibleRect.maxY {
-      return nil
-    }
-    
-    rect.origin.y -= visibleRect.origin.y
     return rect
   }
 }

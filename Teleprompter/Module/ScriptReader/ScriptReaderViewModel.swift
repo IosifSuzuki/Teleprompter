@@ -181,11 +181,14 @@ class ScriptReaderViewModel: ObservableObject {
       string: script,
       attributes: scriptAttributedString,
     )
-    guard let selectedWordWindowFrame = nsAttributedString.rectForSelectedRange(nsRange, visibleRect: scrollBounds) else {
+    guard
+      let selectedWordWindowFrame = nsAttributedString.rectForSelectedRange(nsRange, width: scrollBounds.width),
+      scrollBounds.contains(selectedWordWindowFrame)
+    else {
       return
     }
     
-    let offsetY = max(0, self.scrollBounds.minY + selectedWordWindowFrame.minY)
+    let offsetY = max(0, selectedWordWindowFrame.minY)
     currentContentOffset.y = min(self.scrollContentSize.height - self.scrollBounds.height, offsetY)
   }
 }
