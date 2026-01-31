@@ -15,12 +15,15 @@ struct ScriptEditorView: View {
     ScrollView {
       VStack(spacing: 12) {
         textEditor
-        completeButton
-        Spacer()
+        HStack {
+          completeButton
+          Spacer()
+          selectLanguagePicker
+        }
       }
+      .padding()
     }
     .navigationDestination(type: ScriptEditorRouter.self)
-    .padding()
     .toolbar(content: navigationBar)
     .navigationBarTitleDisplayMode(.inline)
     .navigationTitle("Script Editor")
@@ -55,10 +58,13 @@ extension ScriptEditorView {
   var completeButton: some View {
     Button {
       globalRouter.navigate(
-        to: ScriptEditorRouter.scriptReader(text: viewModel.text)
+        to: ScriptEditorRouter.scriptReader(
+          text: viewModel.text,
+          locale: viewModel.selectedLanguage.locale
+        )
       )
     } label: {
-      Text("Done")
+      Text("Read script")
     }
     .disabled(viewModel.text.isEmpty)
     .buttonStyle(.primary)
@@ -66,6 +72,19 @@ extension ScriptEditorView {
   
   var debugToggle: some View {
     Toggle("Debug", isOn: $viewModel.preferences.isDebugMode)
+  }
+  
+  var selectLanguagePicker: some View {
+    Picker(
+      "Select langugae",
+      selection: $viewModel.selectedLanguage
+    ) {
+      ForEach(Language.allCases) { language in
+        Text(language.title)
+          .tag(language)
+      }
+    }
+    .pickerStyle(.menu)
   }
 }
 

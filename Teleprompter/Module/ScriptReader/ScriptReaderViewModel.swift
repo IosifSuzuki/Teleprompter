@@ -11,10 +11,11 @@ import SwiftUI
 
 class ScriptReaderViewModel: ObservableObject {
   @Published var isRecording = false
-  @Published var formatedScript: AttributedString
+  @Published var formatedScript = AttributedString()
   @Published var transcription: TranscriptionModel?
   @Published var currentContentOffset: CGPoint = .zero
   @Published var scrollBounds: CGRect = .zero
+  @Published var scrollContentSize: CGSize = .zero
   private var preferences = Preferences()
   private var script: String
   
@@ -40,9 +41,7 @@ class ScriptReaderViewModel: ObservableObject {
       currentStartWordIndex: script.startIndex,
       endIndex: script.index(offsetByWords: readerWindowSideOffset, from: script.startIndex)
     )
-    formatedScript = AttributedString(script)
-    formatedScript.font = .system(size: 20)
-    
+    formatedScript = AttributedString(script, attributes: AttributeContainer(scriptAttributedString))
     configureSubscriptions()
   }
   
@@ -74,7 +73,7 @@ class ScriptReaderViewModel: ObservableObject {
           if let nextScriptWordRange = self.script.range(
             of: findWordPattern,
             options: [.caseInsensitive, .regularExpression],
-            range: nextExpectedWordIndex..<self.readerWindow.endIndex
+            range: nextExpectedWordIndex..<max(nextExpectedWordIndex, self.readerWindow.endIndex)
           ) {
             scriptWordRange = nextScriptWordRange
           } else if let currentWordRange = self.script.range(
@@ -117,7 +116,9 @@ class ScriptReaderViewModel: ObservableObject {
           self.highlightScript()
         }
         
-        keepCurrentWordInScrollBounds()
+        if self.currentWordRange != nil {
+          keepCurrentWordInScrollBounds()
+        }
       }
       .store(in: &cancellables)
   }
@@ -174,23 +175,35 @@ class ScriptReaderViewModel: ObservableObject {
   }
   
   func keepCurrentWordInScrollBounds() {
-    guard let currentWordRange else {
-      return
-    }
-    let nsRange = self.script.nsRange(from: currentWordRange)
-    
+    let nsRange = self.script.nsRange(from: self.readerWindow.startIndex..<self.readerWindow.endIndex)
     
     let nsAttributedString = NSAttributedString(
       string: script,
-      attributes: [
-        .font: UIFont.systemFont(ofSize: 20),
-      ]
+      attributes: scriptAttributedString,
     )
-    guard let selectedWordFrame = nsAttributedString.rectForSelectedRange(nsRange, visibleRect: scrollBounds) else {
+    guard let selectedWordWindowFrame = nsAttributedString.rectForSelectedRange(nsRange, visibleRect: scrollBounds) else {
       return
     }
     
-    let offsetY = max(0, selectedWordFrame.minY)
-    currentContentOffset.y = min(scrollBounds.maxY, scrollBounds.minY + offsetY)
+    let offsetY = max(0, self.scrollBounds.minY + selectedWordWindowFrame.minY)
+    currentContentOffset.y = min(self.scrollContentSize.height - self.scrollBounds.height, offsetY)
+  }
+}
+
+private extension ScriptReaderViewModel {
+  var scriptAttributedString: [NSAttributedString.Key : Any] {
+    let baseFont = UIFont.systemFont(ofSize: 20)
+    let scaledFont = UIFontMetrics.default.scaledFont(for: baseFont)
+    
+    let paragraphStyle = NSMutableParagraphStyle()
+    paragraphStyle.lineBreakMode = .byWordWrapping
+    
+    paragraphStyle.minimumLineHeight = scaledFont.lineHeight
+    paragraphStyle.maximumLineHeight = scaledFont.lineHeight
+    paragraphStyle.lineSpacing = 0
+    return [
+      .font: scaledFont,
+      .paragraphStyle: paragraphStyle
+    ]
   }
 }

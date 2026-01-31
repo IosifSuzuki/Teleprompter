@@ -8,12 +8,17 @@
 import SwiftUI
 
 enum ScriptEditorRouter: Hashable, Routing {
-  case scriptReader(text: String)
+  case scriptReader(text: String, locale: Locale)
   
   func view() -> some View {
     switch self {
-      case let .scriptReader(text):
-        ScriptReaderView(viewModel: ScriptReaderViewModel(script: text, speechToTextService: SpeechToTextService()))
+      case let .scriptReader(text, locale):
+        ScriptReaderView(
+          viewModel: ScriptReaderViewModel(
+            script: text,
+            speechToTextService: SpeechToTextService(locale: locale)
+          )
+        )
     }
   }
 }

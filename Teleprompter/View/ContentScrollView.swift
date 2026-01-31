@@ -12,18 +12,21 @@ struct ContentScrollView<Content: View>: UIViewRepresentable {
   let axes: Axis.Set
   @Binding var contentOffset: CGPoint
   @Binding var bounds: CGRect
+  @Binding var contentSize: CGSize
   let content: Content
   
   init(
     axes: Axis.Set = .vertical,
     contentOffset: Binding<CGPoint>,
     bounds: Binding<CGRect>,
+    contentSize: Binding<CGSize>,
     @ViewBuilder content: () -> Content
   ) {
     self.axes = axes
     _contentOffset = contentOffset
     self.content = content()
     _bounds = bounds
+    _contentSize = contentSize
   }
   
   func makeCoordinator() -> Coordinator {
@@ -35,7 +38,7 @@ struct ContentScrollView<Content: View>: UIViewRepresentable {
     scrollView.showsVerticalScrollIndicator = false
     scrollView.showsHorizontalScrollIndicator = false
     scrollView.delegate = context.coordinator
-    
+    scrollView.contentOffset = .zero
     let host = UIHostingController(rootView: content)
     host.view.translatesAutoresizingMaskIntoConstraints = false
     
@@ -65,12 +68,12 @@ struct ContentScrollView<Content: View>: UIViewRepresentable {
   func updateUIView(_ scrollView: UIScrollView, context: Context) {
     context.coordinator.hostingController?.rootView = content
     
-    if scrollView.contentOffset != contentOffset {
-      scrollView.setContentOffset(contentOffset, animated: true)
-    }
-    
-    if scrollView.bounds != bounds {
-      bounds = scrollView.bounds
+    DispatchQueue.main.async {
+      if scrollView.contentOffset != self.contentOffset {
+        scrollView.setContentOffset(self.contentOffset, animated: true)
+      }
+      self.bounds = scrollView.bounds
+      self.contentSize = scrollView.contentSize
     }
   }
   
@@ -83,8 +86,11 @@ struct ContentScrollView<Content: View>: UIViewRepresentable {
     }
     
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-      parent.contentOffset = scrollView.contentOffset
-      parent.bounds = scrollView.bounds
+      DispatchQueue.main.async { [weak self] in
+        self?.parent.contentOffset = scrollView.contentOffset
+        self?.parent.bounds = scrollView.bounds
+        self?.parent.contentSize = scrollView.contentSize
+      }
     }
   }
 }

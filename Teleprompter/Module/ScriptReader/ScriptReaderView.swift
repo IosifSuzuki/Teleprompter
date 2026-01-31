@@ -12,13 +12,13 @@ struct ScriptReaderView: View {
   var body: some View {
     ContentScrollView(
       contentOffset: $viewModel.currentContentOffset,
-      bounds: $viewModel.scrollBounds
+      bounds: $viewModel.scrollBounds,
+      contentSize: $viewModel.scrollContentSize,
     ) {
       Text(viewModel.formatedScript)
         .foregroundStyle(.white)
         .lineLimit(nil)
         .frame(maxWidth: .infinity)
-        .padding()
     }
     .navigationBarTitleDisplayMode(.inline)
     .navigationTitle("Script Reader")

@@ -17,10 +17,8 @@ class SpeechToTextService: SpeechToTextServiceProtocol {
   private var task: SFSpeechRecognitionTask?
   private let recognizer: SFSpeechRecognizer?
   
-  /// Initializes a new instance of the speech recognition service with the provided locale identifier.
-  /// - Parameter localeIdentifier: The locale identifier to use (defaults to the device's current locale).
-  init(localeIdentifier: String = Locale.current.identifier) {
-    self.recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier))
+  init(locale: Locale = .current) {
+    self.recognizer = SFSpeechRecognizer(locale: locale)
   }
   
   /// Requests permissions and verifies the availability of the speech recognizer.
