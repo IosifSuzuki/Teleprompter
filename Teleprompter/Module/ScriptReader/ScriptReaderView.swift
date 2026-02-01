@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct ScriptReaderView: View {
   @ObservedObject var viewModel: ScriptReaderViewModel
@@ -14,6 +15,7 @@ struct ScriptReaderView: View {
       contentOffset: $viewModel.currentContentOffset,
       bounds: $viewModel.scrollBounds,
       contentSize: $viewModel.scrollContentSize,
+      contentInset: UIEdgeInsets(top: 8, left: 8, bottom: -8, right: -8)
     ) {
       Text(viewModel.formatedScript)
         .foregroundStyle(.white)

@@ -9,7 +9,7 @@ import UIKit
 import SwiftUI
 
 extension NSAttributedString {
-  func visibleText(in visibleRect: CGRect) -> NSAttributedString? {
+  func visibleTextRange(in visibleRect: CGRect) -> NSRange? {
     let textStorage = NSTextStorage(attributedString: self)
     let textContainer = NSTextContainer(size: CGSize(width: visibleRect.width, height: .greatestFiniteMagnitude))
     textContainer.lineFragmentPadding = 0
@@ -31,7 +31,7 @@ extension NSAttributedString {
     guard startChar < endChar else {
       return nil
     }
-    return self.attributedSubstring(from: NSRange(location: startChar, length: endChar - startChar))
+    return NSRange(location: startChar, length: endChar - startChar)
   }
   
   func rectForSelectedRange(_ range: NSRange, width: CGFloat) -> CGRect? {
@@ -51,7 +51,6 @@ extension NSAttributedString {
     layoutManager.ensureLayout(for: textContainer)
     
     let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-    var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-    return rect
+    return layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
   }
 }

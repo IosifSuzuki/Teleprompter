@@ -7,7 +7,7 @@
 import Foundation
 
 extension String {
-  func index(offsetByWords wordCount: Int, from start: String.Index) -> String.Index {
+  func index(offsetByWordsForward wordCount: Int, from start: String.Index) -> String.Index {
     let utf16Start = self.utf16.distance(from: self.startIndex, to: start)
     
     let tokenizer = CFStringTokenizerCreate(
@@ -37,6 +37,16 @@ extension String {
     }
     
     return self.utf16.index(self.startIndex, offsetBy: currentUTF16Index, limitedBy: self.utf16.endIndex) ?? self.endIndex
+  }
+  
+  func index(offsetByWordsBackward wordCount: Int, to end: String.Index) -> String.Index {
+    var index = self.startIndex
+    var currentWordCount = countWords(from: index, to: end)
+    while currentWordCount > wordCount {
+      index = self.nextAlphabetIndex(from: self.index(offsetByWordsForward: 1, from: index))
+      currentWordCount = countWords(from: index, to: end)
+    }
+    return index
   }
   
   func countWords(from start: String.Index, to end: String.Index) -> Int {
@@ -69,5 +79,10 @@ extension String {
     let location = utf16.distance(from: startIndex, to: range.lowerBound)
     let length = utf16.distance(from: range.lowerBound, to: range.upperBound)
     return NSRange(location: location, length: length)
+  }
+  
+  var wordPatternRegex: String {
+    let escaped = NSRegularExpression.escapedPattern(for: self)
+    return "\\b\(escaped)\\b"
   }
 }

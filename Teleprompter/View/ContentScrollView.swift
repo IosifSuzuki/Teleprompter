@@ -13,6 +13,7 @@ struct ContentScrollView<Content: View>: UIViewRepresentable {
   @Binding var contentOffset: CGPoint
   @Binding var bounds: CGRect
   @Binding var contentSize: CGSize
+  var contentInset: UIEdgeInsets
   let content: Content
   
   init(
@@ -20,6 +21,7 @@ struct ContentScrollView<Content: View>: UIViewRepresentable {
     contentOffset: Binding<CGPoint>,
     bounds: Binding<CGRect>,
     contentSize: Binding<CGSize>,
+    contentInset: UIEdgeInsets,
     @ViewBuilder content: () -> Content
   ) {
     self.axes = axes
@@ -27,6 +29,7 @@ struct ContentScrollView<Content: View>: UIViewRepresentable {
     self.content = content()
     _bounds = bounds
     _contentSize = contentSize
+    self.contentInset = contentInset
   }
   
   func makeCoordinator() -> Coordinator {
@@ -35,6 +38,7 @@ struct ContentScrollView<Content: View>: UIViewRepresentable {
   
   func makeUIView(context: Context) -> UIScrollView {
     let scrollView = UIScrollView()
+    scrollView.contentInset = contentInset
     scrollView.showsVerticalScrollIndicator = false
     scrollView.showsHorizontalScrollIndicator = false
     scrollView.delegate = context.coordinator

@@ -12,7 +12,6 @@ import SwiftUI
 class ScriptReaderViewModel: ObservableObject {
   @Published var isRecording = false
   @Published var formatedScript = AttributedString()
-  @Published var transcription: TranscriptionModel?
   @Published var currentContentOffset: CGPoint = .zero
   @Published var scrollBounds: CGRect = .zero
   @Published var scrollContentSize: CGSize = .zero
@@ -21,6 +20,17 @@ class ScriptReaderViewModel: ObservableObject {
   
   private var windowWordsBackground: Color = .yellow
   private var currentWordBackground: Color = .red
+  private var textColor: UIColor {
+    UIColor { traitCollection in
+      traitCollection.userInterfaceStyle == .dark ? .white : .black
+    }
+  }
+  
+  private var readTextColor: UIColor {
+    UIColor { traitCollection in
+      traitCollection.userInterfaceStyle == .dark ? .darkGray : .lightGray
+    }
+  }
   
   private var currentWordRange: Range<String.Index>?
   private var readerWindow: ReaderWindow
@@ -29,8 +39,8 @@ class ScriptReaderViewModel: ObservableObject {
     script[readerWindow.startIndex..<readerWindow.endIndex]
   }
   private let speechToTextService: SpeechToTextService
-  private var transcriptionTask: Task<Void, Never>?
   
+  private var transcriptioSubscriber: AnyCancellable?
   private var cancellables = Set<AnyCancellable>()
   
   init(script: String, speechToTextService: SpeechToTextService) {
@@ -39,88 +49,9 @@ class ScriptReaderViewModel: ObservableObject {
     self.readerWindow = ReaderWindow(
       startIndex: script.startIndex,
       currentStartWordIndex: script.startIndex,
-      endIndex: script.index(offsetByWords: readerWindowSideOffset, from: script.startIndex)
+      endIndex: script.index(offsetByWordsForward: readerWindowSideOffset, from: script.startIndex)
     )
     formatedScript = AttributedString(script, attributes: AttributeContainer(scriptAttributedString))
-    configureSubscriptions()
-  }
-  
-  func configureSubscriptions() {
-    $transcription
-      .map { model -> String? in
-        guard
-          let currentText = model?.currentText, !currentText.isEmpty,
-          let wordSubstring = currentText.split(separator: " ").last?.trimmingCharacters(in: .punctuationCharacters)
-        else {
-          return nil
-        }
-        return String(wordSubstring)
-      }
-      .sink { [weak self] word in
-        guard let self, let word else {
-          return
-        }
-        
-        let findWordPattern = "\\b\(word)\\b"
-        if self.readerWindowSubstring.range(
-          of: findWordPattern,
-          options: [.caseInsensitive, .regularExpression]
-        ) != nil {
-          let nextExpectedWordIndex = self.script.nextAlphabetIndex(
-            from: self.script.index(offsetByWords: 1, from: self.readerWindow.currentStartWordIndex)
-          )
-          var scriptWordRange: Range<String.Index>
-          if let nextScriptWordRange = self.script.range(
-            of: findWordPattern,
-            options: [.caseInsensitive, .regularExpression],
-            range: nextExpectedWordIndex..<max(nextExpectedWordIndex, self.readerWindow.endIndex)
-          ) {
-            scriptWordRange = nextScriptWordRange
-          } else if let currentWordRange = self.script.range(
-            of: findWordPattern,
-            options: [.caseInsensitive, .regularExpression],
-            range: self.readerWindow.currentStartWordIndex..<nextExpectedWordIndex
-          ) {
-            scriptWordRange = currentWordRange
-          } else if let previousScriptWordRange = self.script.range(
-            of: findWordPattern,
-            options: [.caseInsensitive, .regularExpression],
-            range: self.readerWindow.startIndex..<self.readerWindow.currentStartWordIndex
-          ) {
-            scriptWordRange = previousScriptWordRange
-          } else {
-            scriptWordRange = self.currentWordRange ?? self.readerWindow.startIndex..<self.readerWindow.endIndex
-          }
-          self.currentWordRange = scriptWordRange
-          let readedWordsInsideReaderWindow = self.script.countWords(
-            from: self.readerWindow.startIndex,
-            to: scriptWordRange.lowerBound
-          )
-          var newReaderWindow = self.readerWindow
-          newReaderWindow.currentStartWordIndex = scriptWordRange.lowerBound
-          if readedWordsInsideReaderWindow > readerWindowSideOffset {
-            let readerWindowStartIndex = self.script.index(
-              offsetByWords: readedWordsInsideReaderWindow - readerWindowSideOffset,
-              from: self.readerWindow.startIndex
-            )
-            newReaderWindow.startIndex = self.script.nextAlphabetIndex(from: readerWindowStartIndex)
-          }
-          newReaderWindow.endIndex = self.script.index(
-            offsetByWords: readerWindowSideOffset + 1,
-            from: scriptWordRange.lowerBound
-          )
-          self.readerWindow = newReaderWindow
-        }
-        
-        if self.preferences.isDebugMode {
-          self.highlightScript()
-        }
-        
-        if self.currentWordRange != nil {
-          keepCurrentWordInScrollBounds()
-        }
-      }
-      .store(in: &cancellables)
   }
   
   @MainActor
@@ -131,18 +62,61 @@ class ScriptReaderViewModel: ObservableObject {
     
     isRecording = true
     
-    transcriptionTask = Task {
-      do {
-        try await speechToTextService.authorize()
+    transcriptioSubscriber = speechToTextService
+      .transcriptionPublisher()
+      .sink { _ in
         
-        let stream = speechToTextService.transcribe()
-        for try await partialResult in stream {
-          self.transcription = partialResult
+      } receiveValue: { [weak self] model in
+        guard let self, let word = model.lastWord else {
+          return
         }
-      } catch {
-        print(error.localizedDescription)
+        
+        print(word)
+        
+        var scriptWordRange: Range<String.Index>? = self.findWordNextExpectedWord(word: word)
+        
+        if scriptWordRange == nil {
+          scriptWordRange = self.findWordInRepeatedRange(word: word)
+        }
+        if scriptWordRange == nil {
+          scriptWordRange = self.findWordInForwardReaderWindow(word: word)
+        }
+        if scriptWordRange == nil {
+          scriptWordRange = self.findWordInBackwardReaderWindow(word: word)
+        }
+
+        if let scriptWordRange {
+          self.currentWordRange = scriptWordRange
+          let readWordsInsideReaderWindow = self.script.countWords(
+            from: self.readerWindow.startIndex,
+            to: scriptWordRange.lowerBound
+          )
+          var newReaderWindow = self.readerWindow
+          newReaderWindow.currentStartWordIndex = scriptWordRange.lowerBound
+          if readWordsInsideReaderWindow > readerWindowSideOffset {
+            let readerWindowStartIndex = self.script.index(
+              offsetByWordsForward: readWordsInsideReaderWindow - readerWindowSideOffset,
+              from: self.readerWindow.startIndex
+            )
+            newReaderWindow.startIndex = self.script.nextAlphabetIndex(from: readerWindowStartIndex)
+          }
+          newReaderWindow.endIndex = self.script.index(
+            offsetByWordsForward: readerWindowSideOffset + 1,
+            from: scriptWordRange.lowerBound
+          )
+          self.readerWindow = newReaderWindow
+        }
+        
+        self.highlightReadScript()
+        
+        if self.preferences.isDebugMode {
+          self.highlightReadWindowScript()
+        }
+        
+        if self.currentWordRange != nil {
+          keepCurrentWordInScrollBounds()
+        }
       }
-    }
   }
   
   @MainActor
@@ -151,12 +125,14 @@ class ScriptReaderViewModel: ObservableObject {
       return
     }
     isRecording = false
-    transcriptionTask?.cancel()
-    transcriptionTask = nil
-    speechToTextService.stopTranscribing()
+    transcriptioSubscriber?.cancel()
   }
-  
-  func highlightScript() {
+}
+
+// MARK: - UI Begavuour
+
+private extension ScriptReaderViewModel {
+  func highlightReadWindowScript() {
     self.formatedScript.backgroundColor = .clear
     
     let formatedReaderWindowStartIndex = AttributedString.Index(self.readerWindow.startIndex, within: self.formatedScript)
@@ -172,6 +148,16 @@ class ScriptReaderViewModel: ObservableObject {
         self.formatedScript[currentWordStartIndex..<currentWordEndIndex].backgroundColor = currentWordBackground
       }
     }
+  }
+  
+  func highlightReadScript() {
+    guard
+      let currentWordRange,
+      let currentWordEndIndex = AttributedString.Index(currentWordRange.upperBound, within: self.formatedScript)
+    else {
+      return
+    }
+    self.formatedScript[...currentWordEndIndex].foregroundColor = readTextColor
   }
   
   func keepCurrentWordInScrollBounds() {
@@ -193,9 +179,64 @@ class ScriptReaderViewModel: ObservableObject {
   }
 }
 
+// MARK: - Find word in script
+private extension ScriptReaderViewModel {
+  func findWordNextExpectedWord(word: String) -> Range<String.Index>? {
+    let findWordPattern = word.wordPatternRegex
+    let nextExpectedWordStartIndex = self.script.nextAlphabetIndex(
+      from: self.script.index(offsetByWordsForward: 1, from: self.readerWindow.currentStartWordIndex)
+    )
+    let nextExpectedWordEndIndex = self.script.nextAlphabetIndex(
+      from: self.script.index(offsetByWordsForward: 2, from: self.readerWindow.currentStartWordIndex)
+    )
+    
+    return script.range(
+      of: findWordPattern,
+      options: [.caseInsensitive, .regularExpression],
+      range: nextExpectedWordStartIndex..<nextExpectedWordEndIndex
+    )
+  }
+  
+  func findWordInForwardReaderWindow(word: String) -> Range<String.Index>? {
+    let findWordPattern = word.wordPatternRegex
+    let nextExpectedWordIndex = script.nextAlphabetIndex(
+      from: script.index(offsetByWordsForward: 1, from: readerWindow.currentStartWordIndex)
+    )
+    
+    return script.range(
+      of: findWordPattern,
+      options: [.caseInsensitive, .regularExpression],
+      range: nextExpectedWordIndex..<max(nextExpectedWordIndex, readerWindow.endIndex)
+    )
+  }
+  
+  func findWordInRepeatedRange(word: String) -> Range<String.Index>? {
+    let findWordPattern = word.wordPatternRegex
+    let nextExpectedWordStartIndex = script.nextAlphabetIndex(
+      from: script.index(offsetByWordsForward: 1, from: readerWindow.currentStartWordIndex)
+    )
+    
+    return script.range(
+      of: findWordPattern,
+      options: [.caseInsensitive, .regularExpression],
+      range: readerWindow.currentStartWordIndex..<nextExpectedWordStartIndex
+    )
+  }
+  
+  func findWordInBackwardReaderWindow(word: String) -> Range<String.Index>? {
+    let findWordPattern = word.wordPatternRegex
+    
+    return script.range(
+      of: findWordPattern,
+      options: [.caseInsensitive, .regularExpression],
+      range: readerWindow.startIndex..<readerWindow.currentStartWordIndex
+    )
+  }
+}
+
 private extension ScriptReaderViewModel {
   var scriptAttributedString: [NSAttributedString.Key : Any] {
-    let baseFont = UIFont.systemFont(ofSize: 20)
+    let baseFont = UIFont.systemFont(ofSize: 40)
     let scaledFont = UIFontMetrics.default.scaledFont(for: baseFont)
     
     let paragraphStyle = NSMutableParagraphStyle()
@@ -206,6 +247,7 @@ private extension ScriptReaderViewModel {
     paragraphStyle.lineSpacing = 0
     return [
       .font: scaledFont,
+      .foregroundColor: textColor,
       .paragraphStyle: paragraphStyle
     ]
   }

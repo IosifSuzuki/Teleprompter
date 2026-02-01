@@ -6,9 +6,9 @@
 //
 
 import Foundation
+import Combine
 
 protocol SpeechToTextServiceProtocol {
-  func authorize() async throws
-  func transcribe() -> AsyncThrowingStream<TranscriptionModel, Error>
-  func stopTranscribing()
+  func speachAuthorizationStatusPublisher() -> AnyPublisher<SpeachAuthorizationStatus, Never>
+  func transcriptionPublisher() -> AnyPublisher<Transcription, Error>
 }
