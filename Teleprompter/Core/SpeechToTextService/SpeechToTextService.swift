@@ -68,6 +68,16 @@ extension SpeechToTextService: SFSpeechRecognitionTaskDelegate {
     let model = Transcription(segments: segments)
     transcriptionSubject.send(model)
   }
+  
+  func speechRecognitionTaskWasCancelled(_ task: SFSpeechRecognitionTask) {
+    transcriptionSubject.send(completion: .failure(CancellationError()))
+  }
+  
+  func speechRecognitionTask(_ task: SFSpeechRecognitionTask, didFinishSuccessfully successfully: Bool) {
+    if !successfully, let error = task.error {
+      transcriptionSubject.send(completion: .failure(error))
+    }
+  }
 }
 
 extension SpeechToTextService: SpeechToTextServiceProtocol {

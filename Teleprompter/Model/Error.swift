@@ -25,6 +25,7 @@ struct LocalizedAlertError: LocalizedError {
 enum SpeechPermissionError: LocalizedError {
   case microphoneDenied
   case recognizerUnavailable
+  case unknown(error: Error)
   
   var errorDescription: String? {
     switch self {
@@ -32,6 +33,8 @@ enum SpeechPermissionError: LocalizedError {
         return "Microphone access was denied. Please enable it in Settings."
       case .recognizerUnavailable:
         return "Speech recognition service is currently unavailable."
+      case .unknown(error: let error):
+        return "Unknown error occurred: \(error)."
     }
   }
 }

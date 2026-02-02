@@ -79,10 +79,11 @@ class ScriptReaderViewModel: ObservableObject {
       .sink { [weak self] completion in
         switch completion {
           case .failure(let error):
-            if let localizedAlertError = LocalizedAlertError(error: error) {
-              self?.error = localizedAlertError
-              self?.isRecording = false
+            self?.error = LocalizedAlertError(error: error)
+            if self?.error == nil {
+              self?.error = LocalizedAlertError(error: SpeechPermissionError.unknown(error: error))
             }
+            self?.isRecording = false
           case .finished:
             self?.isRecording = false
         }
