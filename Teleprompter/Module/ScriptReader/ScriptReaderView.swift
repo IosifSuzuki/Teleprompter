@@ -15,13 +15,14 @@ struct ScriptReaderView: View {
       contentOffset: $viewModel.currentContentOffset,
       bounds: $viewModel.scrollBounds,
       contentSize: $viewModel.scrollContentSize,
-      contentInset: UIEdgeInsets(top: 8, left: 8, bottom: -8, right: -8)
+      contentInset: viewModel.contentInset
     ) {
       Text(viewModel.formatedScript)
         .foregroundStyle(.white)
         .lineLimit(nil)
         .frame(maxWidth: .infinity)
     }
+    .errorAlert(error: $viewModel.error)
     .navigationBarTitleDisplayMode(.inline)
     .navigationTitle("Script Reader")
     .toolbar {

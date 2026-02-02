@@ -15,6 +15,8 @@ class ScriptReaderViewModel: ObservableObject {
   @Published var currentContentOffset: CGPoint = .zero
   @Published var scrollBounds: CGRect = .zero
   @Published var scrollContentSize: CGSize = .zero
+  @Published var error: Error?
+  var contentInset = UIEdgeInsets(top: 8, left: 8, bottom: -8, right: -8)
   private var preferences = Preferences()
   private var script: String
   
@@ -62,10 +64,28 @@ class ScriptReaderViewModel: ObservableObject {
     
     isRecording = true
     
-    transcriptioSubscriber = speechToTextService
-      .transcriptionPublisher()
-      .sink { _ in
-        
+    transcriptioSubscriber =
+    speechToTextService.speachAuthorizationStatusPublisher()
+      .flatMap{ [speechToTextService] status in
+        switch status {
+          case .authorized:
+            return speechToTextService.transcriptionPublisher().eraseToAnyPublisher()
+          case .microphoneDenied:
+            return Fail(error: SpeechPermissionError.microphoneDenied).eraseToAnyPublisher()
+          case .recognizerUnavailable:
+            return Fail(error: SpeechPermissionError.recognizerUnavailable).eraseToAnyPublisher()
+        }
+      }
+      .sink { [weak self] completion in
+        switch completion {
+          case .failure(let error):
+            if let localizedAlertError = LocalizedAlertError(error: error) {
+              self?.error = localizedAlertError
+              self?.isRecording = false
+            }
+          case .finished:
+            self?.isRecording = false
+        }
       } receiveValue: { [weak self] model in
         guard let self, let word = model.lastWord else {
           return
@@ -167,6 +187,10 @@ private extension ScriptReaderViewModel {
       string: script,
       attributes: scriptAttributedString,
     )
+    var scrollBounds = scrollBounds
+    scrollBounds.origin.y += contentInset.top
+    scrollBounds.origin.x += contentInset.left
+    
     guard
       let selectedWordWindowFrame = nsAttributedString.rectForSelectedRange(nsRange, width: scrollBounds.width),
       scrollBounds.contains(selectedWordWindowFrame)

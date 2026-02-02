@@ -116,17 +116,8 @@ extension SpeechToTextService: SpeechToTextServiceProtocol {
         .eraseToAnyPublisher()
     }
     
-    return speachAuthorizationStatusPublisher()
-      .flatMap { [weak self] _ -> AnyPublisher<Transcription, Error> in
-        guard let self else {
-          return Fail<Transcription, CancellationError>(error: CancellationError())
-            .mapError { $0 as Error }
-            .eraseToAnyPublisher()
-        }
-        
-        return self.transcriptionSubject
-          .eraseToAnyPublisher()
-      }
+    return
+      transcriptionSubject
       .handleEvents(receiveCancel: { [weak self] in
         self?.cleanUp()
       })
